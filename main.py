@@ -17,7 +17,7 @@ class PrunableLinear(nn.Module):
         
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
         nn.init.constant_(self.bias, 0)
-        nn.init.constant_(self.gate_scores, 1.0) 
+        nn.init.constant_(self.gate_scores, 0.0) 
 
     def forward(self, x):
         gates = torch.sigmoid(self.gate_scores)
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     loader_train = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
     loader_test = torch.utils.data.DataLoader(test_data, batch_size=1000, shuffle=False)
 
-    test_lambdas = [1e-5, 1e-4, 1e-3]
+    test_lambdas = [1e-4, 1e-3, 1e-2]
     print(f"{'Penalty (Lambda)':<18} | {'Accuracy (%)':<15} | {'Sparsity (%)':<15}")
     print("-" * 55)
     
