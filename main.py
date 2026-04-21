@@ -4,6 +4,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 class PrunableLinear(nn.Module):
     def __init__(self, in_features, out_features):
@@ -17,6 +22,8 @@ class PrunableLinear(nn.Module):
         
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
         nn.init.constant_(self.bias, 0)
+        
+        # FIX: Start gates at 0.0 so the optimizer has a head start to reach the prune threshold
         nn.init.constant_(self.gate_scores, 0.0) 
 
     def forward(self, x):
@@ -98,16 +105,38 @@ if __name__ == "__main__":
     loader_train = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
     loader_test = torch.utils.data.DataLoader(test_data, batch_size=1000, shuffle=False)
 
-    test_lambdas = [1e-4, 1e-3, 1e-2]
+    # FIX: Heavier penalties to force the network to prune
+    test_lambdas = [0.001, 0.01, 0.05] 
     print(f"{'Penalty (Lambda)':<18} | {'Accuracy (%)':<15} | {'Sparsity (%)':<15}")
     print("-" * 55)
     
     for p_lambda in test_lambdas:
         net = PrunableNet().to(compute_device)
-        optimizer = optim.Adam(net.parameters(), lr=1e-3)
+        
+        # FIX: Higher learning rate so gates reach zero within 10 epochs
+        optimizer = optim.Adam(net.parameters(), lr=0.005) 
         
         for _ in range(10): 
             exec_training_epoch(net, compute_device, loader_train, optimizer, p_lambda)
         
         final_acc, final_spar = calc_metrics(net, compute_device, loader_test)
         print(f"{p_lambda:<18} | {final_acc:<15.2f} | {final_spar:<15.2f}")
+
+    # Extract gates from the final trained model
+    all_gates = []
+    for m in net.modules():
+        if isinstance(m, PrunableLinear):
+            gates = torch.sigmoid(m.gate_scores).detach().cpu().numpy().flatten()
+            all_gates.extend(gates)
+    
+    # Generate and save the plot explicitly to your Mac's Desktop
+    desktop_path = os.path.join(os.path.expanduser('~'), 'Desktop', 'gate_distribution.png')
+    
+    plt.figure(figsize=(8, 5))
+    plt.hist(all_gates, bins=50, color='royalblue', edgecolor='black')
+    plt.title('Distribution of Final Gate Values')
+    plt.xlabel('Gate Value (0 = Pruned, 1 = Kept)')
+    plt.ylabel('Number of Weights')
+    plt.grid(axis='y', alpha=0.75)
+    plt.savefig(desktop_path)
+    print(f"Plot successfully saved directly to your Desktop at: {desktop_path}")
